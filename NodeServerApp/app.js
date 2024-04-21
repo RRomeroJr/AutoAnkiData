@@ -48,7 +48,8 @@ app.post('/api/messages', (req, res) => {
         targetWord: req.body.targetWord,
         translation: req.body.translation,
         defTargetLang: req.body.defTargetLang,
-        imageURL: req.body.imageURL
+        imageURL: req.body.imageURL,
+        sentence: req.body.sentence
     };
     // console.log(JSON.stringify(message))
     if(message.cmd == "startList")
@@ -62,6 +63,7 @@ app.post('/api/messages', (req, res) => {
         messages.push(message);
         // console.log(JSON.stringify(message));
         if(message["translation"] != ""){
+            // console.log(message["sentence"]);
             const cleanedMessage = 
             {
                 cmd: message["cmd"],
@@ -118,7 +120,7 @@ function OutPutLog(_json, _imageName)
    
     _imageTag = `<img src='${_imageName}'/>`            
                         //spanish, picture, english, audio, ranking, sentence
-    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]},\n`); // Needs html stuff on name
+    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]}\n`); // Needs html stuff on name
 }
 
 function extensionFromURL(_url) {
@@ -197,7 +199,9 @@ async function downloadImage(_url, imageName) {
 
             // const filePath = Path.resolve(__dirname, 'images', `${imageName}.${extension}`);
             wordImageExt = extension;
-            const filePath = `D:\\AutoAnkiTestOut\\${imageName}.${extension}`
+
+            //Will fail if directory doesn't exist
+            const filePath = `C:\\AutoAnkiTestOut\\${imageName}.${extension}`
 
             const writer = fs.createWriteStream(filePath)
         

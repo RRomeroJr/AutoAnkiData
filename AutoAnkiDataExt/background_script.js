@@ -101,7 +101,7 @@ async function getSelectedTabs() {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    jsonStr = JSON.stringify({
+    jsonObj = {
       // title: titlesAndUrlsString,
       cmd: "cardData",
       targetWord: inTargetWord,
@@ -109,14 +109,18 @@ async function getSelectedTabs() {
       defTargetLang: "",
       imageURL: info.srcUrl,
       sentence: inSentence
-    })
-    xhr.onload = function() {
+    }
+    // console.log(`sending sentence: ${jsonObj["sentence"]}`);
+    jsonStr = JSON.stringify(jsonObj)
+;    xhr.onload = function() {
       
       if (xhr.status >= 200 && xhr.status < 300) {
         // Request was successful, handle the response
         resJSON = JSON.parse(xhr.responseText)
         if(resJSON["cmd"] == "nextWord"){
-            inTargetWord = resJSON["nextWord"]
+            inTargetWord = resJSON["nextWord"];
+            inSentence = "";
+            inDefTargetLang = "";
             console.log('Next to SpanishDict: ', inTargetWord);
             ToSpanishDict(inTargetWord)
         }else if(resJSON["cmd"] == "extError"){
@@ -167,9 +171,10 @@ async function getSelectedTabs() {
   }
   
   async function startList(info, tab) {
-    inTargetWord = ""
-    inTranslation = ""
-    inDefTargetLang = ""
+    inTargetWord = "";
+    inTranslation = "";
+    inDefTargetLang = "";
+    inSentence = "";
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -177,7 +182,7 @@ async function getSelectedTabs() {
       cmd: "startList"
     })
     xhr.onload = function() {
-      console.log("start onload")
+      // console.log("start onload")
       if (xhr.status >= 200 && xhr.status < 300) {
         // Request was successful, handle the response
         resJSON = JSON.parse(xhr.responseText)
@@ -241,6 +246,7 @@ async function getSelectedTabs() {
   }
   function setSentence(info, tab){
     inSentence = info.selectionText;
+    // console.log(`inSentence: ${inSentence}`);
   }  
   
   browser.browserAction.onClicked.addListener(copyTitleAndUrl);
@@ -298,7 +304,7 @@ async function getSelectedTabs() {
   browser.contextMenus.create({
     id: Sentence,
     title: "Sentence",
-    contexts: ["text"],
+    contexts: ["selection"],
   });
   
   
