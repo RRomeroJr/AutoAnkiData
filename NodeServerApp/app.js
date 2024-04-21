@@ -66,6 +66,7 @@ app.post('/api/messages', (req, res) => {
                 translation: removeSpecialChars(message["translation"]),
                 targetWord: removeSpecialChars(message["targetWord"]),
                 defTargetLang: removeSpecialChars(message["defTargetLang"]),
+                sentence: message["sentence"], // Not clean, I should make a regex like I did before or this
                 imageURL: message["imageURL"]
             } 
     
@@ -113,8 +114,9 @@ function OutPutLog(_json, _imageName)
         fs.writeFileSync("OutputLog.csv", '');
     }
    
-    _imageTag = `<img src='${_imageName}'/>`
-    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]}\n`); // Needs html stuff on name
+    _imageTag = `<img src='${_imageName}'/>`            
+                        //spanish, picture, english, audio, ranking, sentence
+    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]},\n`); // Needs html stuff on name
 }
 
 function extensionFromURL(_url) {

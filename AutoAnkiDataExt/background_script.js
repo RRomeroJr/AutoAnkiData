@@ -1,6 +1,9 @@
 inTargetWord = ""
+//translation becomes the image name so for now I needed a default
+// value for testing
 inTranslation = "EXTENDSION_DEFAULT"
 inDefTargetLang = ""
+inSentence = ""
 
 async function getSelectedTabs() {
     return browser.tabs.query({
@@ -104,7 +107,8 @@ async function getSelectedTabs() {
       targetWord: inTargetWord,
       translation: inTranslation,
       defTargetLang: "",
-      imageURL: info.srcUrl
+      imageURL: info.srcUrl,
+      sentence: inSentence
     })
     xhr.onload = function() {
       
@@ -235,7 +239,9 @@ async function getSelectedTabs() {
     xhr.send(jsonStr);
     console.log("sent message: " + jsonStr)
   }
-  
+  function setSentence(info, tab){
+    inSentence = info.selectionText;
+  }  
   
   browser.browserAction.onClicked.addListener(copyTitleAndUrl);
   
@@ -288,6 +294,12 @@ async function getSelectedTabs() {
     title: "Go Back",
     contexts: ["all"],
   });
+  const Sentence = "Sentence";
+  browser.contextMenus.create({
+    id: Sentence,
+    title: "Sentence",
+    contexts: ["text"],
+  });
   
   
   // eslint-disable-next-line no-unused-vars
@@ -316,6 +328,9 @@ async function getSelectedTabs() {
         break;
       case GoBack:
         goBack(info, tab);
+        break;
+      case Sentence:
+        setSentence(info, tab);
         break;
     }
   });
