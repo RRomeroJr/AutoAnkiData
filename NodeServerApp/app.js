@@ -28,7 +28,9 @@ function removeSpecialChars(str) {
     const regex = new RegExp('[^\\p{L} ]', 'gu');
     return str.replace(regex, "");
   }
-
+if (!fs.existsSync("words.txt")) {
+    fs.writeFileSync("words.txt", '');
+}
 wordList = fs.readFileSync(Path.resolve(__dirname, 'words.txt'), 'utf8')
 
 wordList = wordList.split("\n");
