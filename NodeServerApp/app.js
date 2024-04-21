@@ -17,15 +17,25 @@ const app = express();
 app.use(express.json());
 
 const messages = [];
+const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg"]
+// const SUPPORTED_EXTS = [] // for testing
 
-// wordList = ["fuerza", "pantalla", "miel", "nieve"]
+wordImageExt = "";
+/** 
+ * Remove non-unicode letters and all whitespace that isn't " "(space)
+**/
+function removeSpecialChars(str) {
+    const regex = new RegExp('[^\\p{L} ]', 'gu');
+    return str.replace(regex, "");
+  }
+
 wordList = fs.readFileSync(Path.resolve(__dirname, 'words.txt'), 'utf8')
-// console.log(wordList)
+
 wordList = wordList.split("\n");
 for(let i = 0; i < wordList.length; i++){
-    wordList[i] = wordList[i].replace("\r|","")
+    wordList[i] = removeSpecialChars(wordList[i]);
 }
-// console.log(wordList)
+
 pos = 0
 
 app.use(cors())
@@ -50,33 +60,35 @@ app.post('/api/messages', (req, res) => {
         messages.push(message);
         // console.log(JSON.stringify(message));
         if(message["translation"] != ""){
-            _ext = "";
-            try{
-                _ext = extensionFromURL(message["imageURL"]);
-            }
-            catch{
-                console.log(`${wordList[pos]} ERROR: couldn't get image extension from URL`);
-                res.send({cmd: "extError"});
-                return;
-            }
-            try{ //extension from url could fail
-                _imageName = `${message["translation"]}.${_ext}`
-                OutPutLog(message, _imageName);
-                downloadImage(message["imageURL"], _imageName);
-            }
-            catch(e)
+            const cleanedMessage = 
             {
-                console.log(`${wordList[pos]} skipped. Something went wrong`)
-                console.error(e)
-            }
+                cmd: message["cmd"],
+                translation: removeSpecialChars(message["translation"]),
+                targetWord: removeSpecialChars(message["targetWord"]),
+                defTargetLang: removeSpecialChars(message["defTargetLang"]),
+                imageURL: message["imageURL"]
+            } 
+    
+
+            downloadImage(cleanedMessage["imageURL"], cleanedMessage["translation"])
+            .then(downloadRes => {
+                OutPutLog(cleanedMessage, cleanedMessage["translation"] + "." + wordImageExt);
+                pos = pos + 1;
+                console.log("Next word in list: " + wordList[pos])
+                res.send({cmd: "nextWord", nextWord: wordList[pos]});
+                wordImageExt = "";
+            })
+            .catch(error => {
+                console.error(error);
+                console.log(`${wordList[pos]}: couldn't download that image or input is bad`);
+            })
+
         }
         else
         {
-            console.log(`No translation for ${wordList[pos]} skipping`)
+            console.log(`No translation for ${wordList[pos]}`)
         }
-        pos = pos + 1;
-        console.log("Next word in list: " + wordList[pos])
-        res.send({cmd: "nextWord", nextWord: wordList[pos]});
+        
     }
     else if (message.cmd === "skipWord")
     {
@@ -97,11 +109,12 @@ app.post('/api/messages', (req, res) => {
 });
 function OutPutLog(_json, _imageName)
 {
-    if (!fs.existsSync("OutputLog.txt")) {
-        fs.writeFileSync("OutputLog.txt", '');
+    if (!fs.existsSync("OutputLog.csv")) {
+        fs.writeFileSync("OutputLog.csv", '');
     }
+   
     _imageTag = `<img src='${_imageName}'/>`
-    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_json["translation"]},${_json["defTargetLang"]},${_imageTag}\n`); // Needs html stuff on name
+    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]}\n`); // Needs html stuff on name
 }
 
 function extensionFromURL(_url) {
@@ -121,18 +134,17 @@ function extensionFromURL(_url) {
     }
     
     // gaurd clause
-    const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg"]
+    
     for(ext of SUPPORTED_EXTS){
         if(result === ext){
             return result
         }
     }
-    console.log(result);
     if (!fs.existsSync("ErrorLog.txt")) {
         fs.writeFileSync("ErrorLog.txt", '');
     }
     fs.appendFileSync('ErrorLog.txt', `Extension type error: ${_url}\n`);
-    throw new Error("Extension type error");
+    throw new Error("extensionFromURL, Unsupported or Unknown: " + result);
 }
 function extFromURLNormal(_iURL){
     return _iURL.split('.').pop().toLowerCase();
@@ -144,27 +156,74 @@ function extFromDataURL(_dURL){
 }
 async function downloadImage(_url, imageName) {
     const url = _url
-    extension = extensionFromURL(_url)
-    const path = Path.resolve(__dirname, 'images', imageName)
-    // const path = `C:\\AutoAnkiTestOut\\${imageName}`
-    const writer = fs.createWriteStream(path)
     
-    const response = await Axios({
-        url,
-        method: 'GET',
-        responseType: 'stream',
-        headers: {
-            'content-type': ''
-        }
-    })
-    console.log(response.headers)
-    console.log(response)
-    response.data.pipe(writer)
+    try{
+        const axiosRes = await Axios({
+            url,
+            method: 'GET',
+            responseType: 'stream'
+        }).then(response => {
+            extension = "";
+            try
+            {
+                extension = extensionFromURL(_url);
+            }
+            catch
+            {
+                // console.log("Number of headers: ", Object.keys(response.headers).length);
+                const contentType = response.headers['content-type'];
+                // console.log(response)
+                extension = contentType.split('/')[1]; // Extracting the file extension from the content type
+                supported = false;
+                for(ext of SUPPORTED_EXTS){
+                    if(extension === ext){
+                        supported = true;
+                    }
+                }
 
-    return new Promise((resolve, reject) => {
-        writer.on('finish', resolve)
-        writer.on('error', reject)
-    })
+                // throw new Error("Catch this error please! ");
+
+                if(!supported){
+                    return Promise.reject(new Error("Unsupported extension: " + extension));
+                }
+                else{
+                    console.log("Found extension in headers: " + extension);
+                }
+            }
+
+            // const filePath = Path.resolve(__dirname, 'images', `${imageName}.${extension}`);
+            wordImageExt = extension;
+            const filePath = `D:\\AutoAnkiTestOut\\${imageName}.${extension}`
+
+            const writer = fs.createWriteStream(filePath)
+        
+            response.data.pipe(writer);
+            return new Promise((resolve, reject) => {
+                writer.on('finish', resolve)
+                writer.on('error', reject)
+            })
+            // writer.on('finish', () => {
+            //   console.log('Image downloaded successfully.');
+            // });
+        
+            // writer.on('error', (err) => {
+            //   console.error('Error downloading image:', err);
+            // });
+        }).catch(error => {
+            console.log("HANDLED ERROR: " + error);
+            // return Promise.reject(error);
+            throw error;
+        });
+    }
+    catch(e)
+    {
+        throw e;
+        // return Promise.reject(e);
+    }
+    
+    
+
+    
 }
 
 
