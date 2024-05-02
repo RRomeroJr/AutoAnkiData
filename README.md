@@ -30,7 +30,7 @@ I wanted to see if I could build a tool that would help make this process a litt
 
 <b>Setting up the extension</b>:
 - In the address bar type `about:debugging`
-- On the left, `click This Firefox`
+- On the left, click `This Firefox`
 - Under `Temporary Extensions` click `Load Temporary Add-on`
 - Go to where you cloned the repository
 - Open `AutoAnkiExt`  and select `manifest.json`
