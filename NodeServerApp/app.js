@@ -20,6 +20,8 @@ const messages = [];
 const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg"]
 // const SUPPORTED_EXTS = [] // for testing
 
+imageRequired = true;
+
 wordImageExt = "";
 /** 
  * Remove non-unicode letters and all whitespace that isn't " "(space)
@@ -31,12 +33,16 @@ function removeSpecialChars(str) {
 if (!fs.existsSync("words.txt")) {
     fs.writeFileSync("words.txt", '');
 }
+
+let imageSavePath = ""
+
 wordList = fs.readFileSync(Path.resolve(__dirname, 'words.txt'), 'utf8')
 
 wordList = wordList.split("\n");
 for(let i = 0; i < wordList.length; i++){
     wordList[i] = removeSpecialChars(wordList[i]);
 }
+processSettings();
 
 pos = 0
 
@@ -49,13 +55,21 @@ app.post('/api/messages', (req, res) => {
         translation: req.body.translation,
         defTargetLang: req.body.defTargetLang,
         imageURL: req.body.imageURL,
-        sentence: req.body.sentence
+        sentence: req.body.sentence,
+        imageRequired: req.body.imageRequired
     };
+    if(message.hasOwnProperty("imageRequired")){
+        if(imageRequired != message.imageRequired){
+            imageRequired = message.imageRequired;
+            console.log(`Image required: ${imageRequired}`);
+        }
+    }
     // console.log(JSON.stringify(message))
     if(message.cmd == "startList")
     {
-        pos = 0
-        console.log("starting list, 1st word: " + wordList[pos])
+        
+        pos = 0;
+        console.log("starting list, 1st word: " + wordList[pos]);
         res.send({nextWord: wordList[pos]});
     }
     else if (message.cmd == "cardData")
@@ -74,19 +88,25 @@ app.post('/api/messages', (req, res) => {
                 imageURL: message["imageURL"]
             } 
     
-
-            downloadImage(cleanedMessage["imageURL"], cleanedMessage["translation"])
-            .then(downloadRes => {
-                OutPutLog(cleanedMessage, cleanedMessage["translation"] + "." + wordImageExt);
+            if(imageRequired){
+                downloadImage(cleanedMessage["imageURL"], cleanedMessage["translation"])
+                .then(downloadRes => {
+                    OutPutLog(cleanedMessage, cleanedMessage["translation"] + "." + wordImageExt);
+                    pos = pos + 1;
+                    console.log("Next word in list: " + wordList[pos])
+                    res.send({cmd: "nextWord", nextWord: wordList[pos]});
+                    wordImageExt = "";
+                })
+                .catch(error => {
+                    console.error(error);
+                    console.log(`${wordList[pos]}: couldn't download that image or input is bad`);
+                })
+            }else{ //no image required
                 pos = pos + 1;
                 console.log("Next word in list: " + wordList[pos])
                 res.send({cmd: "nextWord", nextWord: wordList[pos]});
-                wordImageExt = "";
-            })
-            .catch(error => {
-                console.error(error);
-                console.log(`${wordList[pos]}: couldn't download that image or input is bad`);
-            })
+                OutPutLog(cleanedMessage, undefined, _imageRequired = false);
+            }
 
         }
         else
@@ -112,14 +132,19 @@ app.post('/api/messages', (req, res) => {
     }
     
 });
-function OutPutLog(_json, _imageName)
+function OutPutLog(_json, _imageName, _imageRequired = true)
 {
     if (!fs.existsSync("OutputLog.csv")) {
         fs.writeFileSync("OutputLog.csv", '');
     }
-   
-    _imageTag = `<img src='${_imageName}'/>`            
-                        //spanish, picture, english, audio, ranking, sentence
+    _imageTag = ''
+    if(_imageRequired){
+        _imageTag = `<img src='${_imageName}'/>`            
+    }
+    // else{
+    //     console.log("OutPutlLog skipping image tag")
+    // }
+    //     //spanish, picture, english, audio, ranking, sentence
     fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]}\n`); // Needs html stuff on name
 }
 
@@ -198,12 +223,15 @@ async function downloadImage(_url, imageName) {
             }
 
             // const filePath = Path.resolve(__dirname, 'images', `${imageName}.${extension}`);
-            wordImageExt = extension;
+
+            //band-aid solution. I needed to get the extension down here somehow
+            // So I used a global variable
+            wordImageExt = extension; 
 
             //Will fail if directory doesn't exist
-            const filePath = `C:\\AutoAnkiTestOut\\${imageName}.${extension}`
+            // const filePath = `C:\\AutoAnkiTestOut\\${imageName}.${extension}`
 
-            const writer = fs.createWriteStream(filePath)
+            const writer = fs.createWriteStream(`${imageSavePath}\\${imageName}.${extension}`)
         
             response.data.pipe(writer);
             return new Promise((resolve, reject) => {
@@ -227,11 +255,20 @@ async function downloadImage(_url, imageName) {
     {
         throw e;
         // return Promise.reject(e);
-    }
-    
-    
+    }   
+}
 
-    
+function processSettings(){
+    var contents = fs.readFileSync("settings.json");
+    var jsonContent = JSON.parse(contents);
+    if(jsonContent["imageSavePath"] === ""){
+        jsonContent["imageSavePath"] = Path.resolve(__dirname, 'images');
+        contents = JSON.stringify(jsonContent);
+        fs.writeFileSync("settings.json", JSON.stringify(jsonContent, null, 4));
+    }
+
+    imageSavePath = jsonContent["imageSavePath"];
+
 }
 
 
