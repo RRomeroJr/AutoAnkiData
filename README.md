@@ -27,7 +27,7 @@ I wanted to see if I could build a tool that would help make this process a litt
    - Or, if you want to do it yourself
    - open the `NodeServerApp` folder
    - run `npm install`
-
+# Usage
 <b>Setting up the extension</b>:
 - In the address bar type `about:debugging`
 - On the left, click `This Firefox`
@@ -39,6 +39,21 @@ I wanted to see if I could build a tool that would help make this process a litt
 - Browse to where you have cloned the repo and open NodeServerApp
 - Make sure there is a file in this directory called "words.txt"
 - Add any words you want to search for in that file
+  - Only 1 word or phrase per line
 - Open a terminal in this directory. (if on windows, you can type cmd in the address bar)
 - run `node app.js`
-- When you are done close the terminal or press `ctrl + c` to stop the application
+
+**Gathering Data**
+- If both are set up open firefox and right click to open the context menu
+- There should sub-menu there call AutoAnkData
+  - options here are contextual and will change depending on what you have selected/ clicked
+- click `start list` to begin
+- When you find a translation for a word you like select it
+- Navigate to the `Make Translation` option
+  - This will save your selection then take you to google images
+  - (Opt.) select a sentence you like and select `Sentence`
+- Right click an image you like and select `Make Image`
+  - This will automatically move you on to the next word
+- Repeat until done
+  - When you are done close the terminal or press `ctrl + c` to stop the application
+- All of your information should be in `OutputLog.csv`
