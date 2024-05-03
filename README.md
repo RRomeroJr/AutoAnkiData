@@ -40,6 +40,9 @@ I wanted to see if I could build a tool that would help make this process a litt
 - Make sure there is a file in this directory called "words.txt"
 - Add any words you want to search for in that file
   - Only 1 word or phrase per line
+- (Opt.) in `settings.json` add the path where you want to download images
+  - Making this Anki's `collections.media` folder will allow you simply import the csv instead of having to paste the images there manually
+  - Default location will be `NodeServerApp/images`
 - Open a terminal in this directory. (if on windows, you can type cmd in the address bar)
 - run `node app.js`
 
