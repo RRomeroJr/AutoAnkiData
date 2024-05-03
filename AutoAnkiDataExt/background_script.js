@@ -1,9 +1,11 @@
-inTargetWord = ""
+inTargetWord = "";
 //translation becomes the image name so for now I needed a default
 // value for testing
-inTranslation = "EXTENDSION_DEFAULT"
-inDefTargetLang = ""
-inSentence = ""
+inTranslation = "EXTENDSION_DEFAULT";
+inDefTargetLang = "";
+inSentence = "";
+imageRequired = true;
+inUrl = ""
 
 async function getSelectedTabs() {
     return browser.tabs.query({
@@ -70,34 +72,7 @@ async function getSelectedTabs() {
     const markdown = tabsToMarkdown(await getSelectedTabs());
     navigator.clipboard.writeText(markdown);
   }
-  // async function thisIsAnImage(info, tab) {
-  //   // console.log("īmej issa! " + "Image URL: " +  info.srcUrl)
-  //   var xhr = new XMLHttpRequest();
-  //   xhr.open('POST', 'http://localhost:7701/api/messages', true);
-  //   xhr.setRequestHeader('Content-Type', 'application/json');
-  //   jsonStr = JSON.stringify({
-  //     // title: titlesAndUrlsString,
-  //     cmd: "cardData",
-  //     translation: inTranslation,
-  //     defTargetLang: "definición en la idioma objetiva",
-  //     imageURL: info.srcUrl
-  //   })
-  //   xhr.onload = function() {
-      
-  //     if (xhr.status >= 200 && xhr.status < 300) {
-  //       // Request was successful, handle the response
-  //       console.log('Response from server:', xhr.responseText);
-  //     } else {
-  //       // Request encountered an error
-  //       console.error('Request failed with status:', xhr.status);
-  //     }
-  //   };
-    
-  //   xhr.send(jsonStr);
-  //   console.log("sent message: " + jsonStr)
-  // }
-  async function thisIsAnImage(info, tab) {
-    // console.log("īmej issa! " + "Image URL: " +  info.srcUrl)
+  function sendCardData(){
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -107,8 +82,9 @@ async function getSelectedTabs() {
       targetWord: inTargetWord,
       translation: inTranslation,
       defTargetLang: "",
-      imageURL: info.srcUrl,
-      sentence: inSentence
+      imageURL: inUrl,
+      sentence: inSentence,
+      imageRequired: imageRequired
     }
     // console.log(`sending sentence: ${jsonObj["sentence"]}`);
     jsonStr = JSON.stringify(jsonObj)
@@ -121,6 +97,7 @@ async function getSelectedTabs() {
             inTargetWord = resJSON["nextWord"];
             inSentence = "";
             inDefTargetLang = "";
+            inUrl = "";
             console.log('Next to SpanishDict: ', inTargetWord);
             ToSpanishDict(inTargetWord)
         }else if(resJSON["cmd"] == "extError"){
@@ -137,6 +114,12 @@ async function getSelectedTabs() {
     xhr.send(jsonStr);
     console.log("sent cardData")
   }
+  async function makeImage(info, tab) {
+    inUrl = info.srcUrl;
+    sendCardData();
+  }
+
+  
   async function ToSpanishDict(_word) {
     _url = "https://www.spanishdict.com/translate/" + _word + "?langFrom=es"
     console.log("https://www.spanishdict.com/translate/" + _word + "?langFrom=es")
@@ -161,25 +144,32 @@ async function getSelectedTabs() {
         console.error("Error: ", error);
     });
   }
-  async function makeTranslation(info, tab) {
+  function makeTranslation(info, tab) {
     inTranslation = info.selectionText;
     console.log(inTranslation);
-    ToGoogleImages(inTranslation);
+    if(imageRequired){
+      ToGoogleImages(inTranslation);
+    }
+    else{
+      sendCardData();
+    }
   }
-  async function setDictForm(info, tab) {
+  function setDictForm(info, tab) {
     inTargetWord = info.selectionText
   }
   
-  async function startList(info, tab) {
+  function startList(info, tab) {
     inTargetWord = "";
     inTranslation = "";
     inDefTargetLang = "";
     inSentence = "";
+    inUrl = "";
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     jsonStr = JSON.stringify({
-      cmd: "startList"
+      cmd: "startList",
+      imageRequired: imageRequired
     })
     xhr.onload = function() {
       // console.log("start onload")
@@ -198,7 +188,7 @@ async function getSelectedTabs() {
     xhr.send(jsonStr);
     console.log("sent message: " + jsonStr)
   }
-  async function skipWord(info, tab) {
+  function skipWord(info, tab) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -221,7 +211,7 @@ async function getSelectedTabs() {
     xhr.send(jsonStr);
     console.log("sent message: " + jsonStr)
   }
-  async function goBack(info, tab) {
+  function goBack(info, tab) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -248,6 +238,10 @@ async function getSelectedTabs() {
     inSentence = info.selectionText;
     // console.log(`inSentence: ${inSentence}`);
   }  
+  function toggleImageRequired(info, tab){
+      imageRequired = !imageRequired;
+      console.log(`Image required: ${imageRequired}`);
+  }
   
   browser.browserAction.onClicked.addListener(copyTitleAndUrl);
   
@@ -264,10 +258,10 @@ async function getSelectedTabs() {
     title: "Copy URLs and titles as markdown links",
     contexts: ["tab"],
   });
-  const ThisIsAnImage = "This is an image";
+  const MakeImage = "Make Image";
   browser.contextMenus.create({
-    id: ThisIsAnImage,
-    title: "This is an image",
+    id: MakeImage,
+    title: "Make Image",
     contexts: ["image"],
   });
   const MakeTranslation = "MakeTranslation";
@@ -306,6 +300,19 @@ async function getSelectedTabs() {
     title: "Sentence",
     contexts: ["selection"],
   });
+  const Options = "Options";
+  browser.contextMenus.create({
+    id: Options,
+    title: "Options",
+    contexts: ["all"],
+  });
+  const ToggleImageRequired = "ToggleImageRequired";
+  browser.contextMenus.create({
+    id: ToggleImageRequired,
+    title: "Toggle Image Required",
+    contexts: ["all"],
+    parentId: "Options"
+  });
   
   
   // eslint-disable-next-line no-unused-vars
@@ -317,8 +324,8 @@ async function getSelectedTabs() {
       case copyAsMarkdownMenuID:
         copyMarkdown();
         break;
-      case ThisIsAnImage:
-        thisIsAnImage(info, tab);
+      case MakeImage:
+        makeImage(info, tab);
         break;
       case MakeTranslation:
         makeTranslation(info, tab);
@@ -337,6 +344,9 @@ async function getSelectedTabs() {
         break;
       case Sentence:
         setSentence(info, tab);
+        break;
+      case ToggleImageRequired:
+        toggleImageRequired(info, tab);
         break;
     }
   });
