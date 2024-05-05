@@ -6,6 +6,16 @@ inDefTargetLang = "";
 inSentence = "";
 imageRequired = true;
 inUrl = ""
+wordList = []
+wordIndexes = []
+currWordIndex = 0
+workingTabs = []
+tabIndex  = 0
+manuallySetDictForm = false;
+const IMAGE_MODES = {
+  UseTranslation: 0, UseTargetWord: 1, UseDictForm: 2
+}
+imagePrefs = [IMAGE_MODES.UseTranslation, IMAGE_MODES.UseDictForm]
 
 async function getSelectedTabs() {
     return browser.tabs.query({
@@ -93,14 +103,7 @@ async function getSelectedTabs() {
       if (xhr.status >= 200 && xhr.status < 300) {
         // Request was successful, handle the response
         resJSON = JSON.parse(xhr.responseText)
-        if(resJSON["cmd"] == "nextWord"){
-            inTargetWord = resJSON["nextWord"];
-            inSentence = "";
-            inDefTargetLang = "";
-            inUrl = "";
-            console.log('Next to SpanishDict: ', inTargetWord);
-            ToSpanishDict(inTargetWord)
-        }else if(resJSON["cmd"] == "extError"){
+        if(resJSON["cmd"] == "extError"){
           console.log(xhr.responseText["cmd"]);
           console.error("Unable to get file extension from that image");
           
@@ -117,9 +120,11 @@ async function getSelectedTabs() {
   async function makeImage(info, tab) {
     inUrl = info.srcUrl;
     sendCardData();
+    nextWord();
   }
-
-  
+  function spanishDictUrl(_word){
+    return "https://www.spanishdict.com/translate/" + _word + "?langFrom=es";
+  }
   async function ToSpanishDict(_word) {
     _url = "https://www.spanishdict.com/translate/" + _word + "?langFrom=es"
     console.log("https://www.spanishdict.com/translate/" + _word + "?langFrom=es")
@@ -131,6 +136,9 @@ async function getSelectedTabs() {
     }).catch(error => {
         console.error("Error: ", error);
     });
+  }
+  function googleImagesUrl(_word){
+    return "https://www.google.com/search?tbm=isch&q=" + _word
   }
   async function ToGoogleImages(_word) {
     _url = "https://www.google.com/search?tbm=isch&q=" + _word
@@ -144,26 +152,78 @@ async function getSelectedTabs() {
         console.error("Error: ", error);
     });
   }
+  function selectGoogleImagesTab(_url){
+    tabIndex += 1
+    browser.tabs.update(workingTabs[tabIndex].id, {active: true, url: _url});
+  }
+  function autoComplete(info, tab){
+    inTranslation = info.selectionText;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'http://localhost:7701/api/messages', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    jsonObj = {
+      // title: titlesAndUrlsString,
+      cmd: "autoComplete",
+      targetWord: inTargetWord,
+      translation: inTranslation,
+      imageRequired: imageRequired
+    }
+    // console.log(`sending sentence: ${jsonObj["sentence"]}`);
+    jsonStr = JSON.stringify(jsonObj)
+;    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // Request was successful, handle the response
+        resJSON = JSON.parse(xhr.responseText)
+        if(resJSON["cmd"] == "autoError"){
+          prevWord();
+          console.error("auoError going back");
+        }
+      } else {
+        // Request encountered an error
+        console.error('Request failed with status:', xhr.status);
+        prevWord();
+      }
+    };
+    nextWord();
+    xhr.send(jsonStr);
+    console.log("sent auto request")
+
+  }
   function makeTranslation(info, tab) {
     inTranslation = info.selectionText;
     console.log(inTranslation);
-    if(imageRequired){
-      ToGoogleImages(inTranslation);
-    }
-    else{
+    if(!imageRequired){
       sendCardData();
+      nextWord();
+      return;
+    }
+    if(manuallySetDictForm){
+      tabIndex = (tabIndex + 1) % workingTabs.length;
+      browser.tabs.update(workingTabs[tabIndex].id, {active: true});
+    }
+    else if(imagePrefs.includes(IMAGE_MODES.UseTranslation)){
+      tabIndex = (tabIndex + 1) % workingTabs.length;
+      browser.tabs.update(workingTabs[tabIndex].id, {active: true, url: googleImagesUrl(inTranslation)});
+      // ToGoogleImages(inTranslation);
     }
   }
   function setDictForm(info, tab) {
     inTargetWord = info.selectionText
+    if(imagePrefs.includes(IMAGE_MODES.UseDictForm)){
+      browser.tabs.update(workingTabs[(tabIndex + 1) % 4].id, {url: googleImagesUrl(inTargetWord)});
+    }
+    manuallySetDictForm = true;
   }
-  
+
   function startList(info, tab) {
+
     inTargetWord = "";
     inTranslation = "";
     inDefTargetLang = "";
     inSentence = "";
     inUrl = "";
+    currWordIndex = 0
+    manuallySetDictForm = false
     var xhr = new XMLHttpRequest();
     xhr.open('POST', 'http://localhost:7701/api/messages', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -175,10 +235,44 @@ async function getSelectedTabs() {
       // console.log("start onload")
       if (xhr.status >= 200 && xhr.status < 300) {
         // Request was successful, handle the response
-        resJSON = JSON.parse(xhr.responseText)
-        inTargetWord = resJSON["nextWord"]
-        console.log('To SpanishDict: ', inTargetWord);
-        ToSpanishDict(inTargetWord)
+        resJSON = JSON.parse(xhr.responseText);
+        wordList = resJSON["wordList"];
+        inTargetWord = wordList[currWordIndex];
+
+        browser.tabs.create({}).then((tab) => {
+          workingTabs.push(tab)
+          browser.tabs.create({}).then((tab2) => {
+            workingTabs.push(tab2)
+            browser.tabs.create({}).then((tab3) => {
+              workingTabs.push(tab3)
+              browser.tabs.create({}).then((tab4) => {
+                workingTabs.push(tab4)
+                imageTabArgs = null
+
+                browser.tabs.update(workingTabs[tabIndex % workingTabs.length].id, { active: true, url: spanishDictUrl(wordList[currWordIndex])});
+                if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
+                  imageTabArgs = { url: googleImagesUrl(wordList[currWordIndex])}
+                }
+                else{
+                  imageTabArgs = {}
+                }
+                browser.tabs.update(workingTabs[tabIndex + 1 % workingTabs.length].id, imageTabArgs);
+                
+                browser.tabs.update(workingTabs[tabIndex + 2 % workingTabs.length].id, { url: spanishDictUrl(wordList[currWordIndex + 1])});
+                if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
+                  imageTabArgs = { url: googleImagesUrl(wordList[currWordIndex + 1])}
+                }
+                else{
+                  imageTabArgs = {}
+                }
+                browser.tabs.update(workingTabs[tabIndex + 3 % workingTabs.length].id, imageTabArgs);
+
+              });
+            });
+          });
+        });
+
+  
       } else {
         // Request encountered an error
         console.error('Request failed with status:', xhr.status);
@@ -188,51 +282,55 @@ async function getSelectedTabs() {
     xhr.send(jsonStr);
     console.log("sent message: " + jsonStr)
   }
-  function skipWord(info, tab) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'http://localhost:7701/api/messages', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    jsonStr = JSON.stringify({
-      cmd: "skipWord"
-    })
-    xhr.onload = function() {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        // Request was successful, handle the response
-        resJSON = JSON.parse(xhr.responseText)
-        inTargetWord = resJSON["nextWord"]
-        console.log('To SpanishDict: ', inTargetWord);
-        ToSpanishDict(inTargetWord)
-      } else {
-        // Request encountered an error
-        console.error('Request failed with status:', xhr.status);
-      }
-    };
+  function nextWord(info, tab) {
+    if(currWordIndex + 1 >= wordList.length){
+      return
+    }
     
-    xhr.send(jsonStr);
-    console.log("sent message: " + jsonStr)
+    if(tabIndex & 1){ // isOdd
+      tabIndex = (tabIndex  + 1) % workingTabs.length;
+    }
+    else{
+      tabIndex = (tabIndex  + 2) % workingTabs.length;
+    }
+
+    currWordIndex += 1;
+    inTargetWord = wordList[currWordIndex];
+    // Update current tab with the order after the next word
+    // before switching to the tab with the current word
+    if(currWordIndex + 1 < wordList.length){
+      browser.tabs.update(workingTabs[(tabIndex + 2) % workingTabs.length].id, { url: spanishDictUrl(wordList[currWordIndex + 1])});
+      if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
+        browser.tabs.update(workingTabs[(tabIndex + 3) % workingTabs.length].id, { url: googleImagesUrl(wordList[currWordIndex + 1])});
+      }
+    }
+    browser.tabs.update(workingTabs[tabIndex].id, {active: true});
+    manuallySetDictForm = false;
+    // --revise: can I use this on the update? is it a promise as well?
+    // .catch(error => {
+    //     console.error("Error: ", error);
+    // });
+    
   }
-  function goBack(info, tab) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'http://localhost:7701/api/messages', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    jsonStr = JSON.stringify({
-      cmd: "GoBack"
-    })
-    xhr.onload = function() {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        // Request was successful, handle the response
-        resJSON = JSON.parse(xhr.responseText)
-        inTargetWord = resJSON["nextWord"]
-        console.log('To SpanishDict: ', inTargetWord);
-        ToSpanishDict(inTargetWord)
-      } else {
-        // Request encountered an error
-        console.error('Request failed with status:', xhr.status);
-      }
-    };
-    
-    xhr.send(jsonStr);
-    console.log("sent message: " + jsonStr)
+  function prevWord(info, tab) {
+    if(currWordIndex - 1 < 0){
+      return 
+    }
+ 
+    if(tabIndex & 1){ // isOdd
+      tabIndex = Math.abs((tabIndex  - 3) % workingTabs.length);
+    }
+    else{
+      tabIndex = Math.abs((tabIndex  - 2) % workingTabs.length);
+    }
+    currWordIndex -= 1;
+    inTargetWord = wordList[currWordIndex];
+    console.log(`workingTabs[${tabIndex}].id, {active: true, url: spanishDictUrl(wordList[${currWordIndex}])}`);
+    browser.tabs.update(workingTabs[tabIndex].id, {active: true, url: spanishDictUrl(wordList[currWordIndex])});
+    if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
+      browser.tabs.update(workingTabs[(tabIndex + 1) % workingTabs.length].id, { url: googleImagesUrl(wordList[currWordIndex])});
+    }
+    manuallySetDictForm = false;
   }
   function setSentence(info, tab){
     inSentence = info.selectionText;
@@ -282,16 +380,16 @@ async function getSelectedTabs() {
     title: "Start List",
     contexts: ["all"],
   });
-  const SkipWord = "SkipWord";
+  const NextWord = "NextWord";
   browser.contextMenus.create({
-    id: SkipWord,
-    title: "Skip Word",
+    id: NextWord,
+    title: "Next Word",
     contexts: ["all"],
   });
-  const GoBack = "GoBack";
+  const PrevWord = "PrevWord";
   browser.contextMenus.create({
-    id: GoBack,
-    title: "Go Back",
+    id: PrevWord,
+    title: "Prev Word",
     contexts: ["all"],
   });
   const Sentence = "Sentence";
@@ -300,6 +398,12 @@ async function getSelectedTabs() {
     title: "Sentence",
     contexts: ["selection"],
   });
+  // const AutoComplete = "I'm feeling lucky (Auto)";
+  // browser.contextMenus.create({
+  //   id: AutoComplete,
+  //   title: "AutoComplete",
+  //   contexts: ["selection"],
+  // });
   const Options = "Options";
   browser.contextMenus.create({
     id: Options,
@@ -336,15 +440,18 @@ async function getSelectedTabs() {
       case SetDictForm:
         setDictForm(info, tab);
         break;
-      case SkipWord:
-        skipWord(info, tab);
+      case NextWord:
+        nextWord(info, tab);
         break;
-      case GoBack:
-        goBack(info, tab);
+      case PrevWord:
+        prevWord(info, tab);
         break;
       case Sentence:
         setSentence(info, tab);
         break;
+      // case AutoComplete:
+      //   autoComplete(info, tab);
+      //   break;
       case ToggleImageRequired:
         toggleImageRequired(info, tab);
         break;
