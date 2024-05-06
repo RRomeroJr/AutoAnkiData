@@ -23,18 +23,18 @@ const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg
 // const SUPPORTED_EXTS = [] // for testing
 
 imageRequired = true;
-
+additionalImagesNames = []
 wordImageExt = "";
 /** 
  * Remove non-unicode letters and all whitespace that isn't " "(space)
 **/
 function removeSpecialChars(str) {
-    if(str === null || str === undefined){
-        return "";
-    }
-    const regex = new RegExp('[^\\p{L} ]', 'gu');
-    return str.replace(regex, "");
+  if(str === null || str === undefined){
+      return "";
   }
+  const regex = new RegExp('[^\\p{L} ]', 'gu');
+  return str.replace(regex, "");
+}
 if (!fs.existsSync("words.txt")) {
     fs.writeFileSync("words.txt", '');
 }
@@ -63,7 +63,7 @@ app.post('/api/messages', (req, res) => {
         sentence: req.body.sentence,
         imageRequired: req.body.imageRequired
     };
-    // console.log(message)
+    // console.log(message.translation)
     let cleanedMessage = cleanMessage(message);
 
     messages.push(message);
@@ -113,15 +113,32 @@ app.post('/api/messages', (req, res) => {
         }
         
     }
-    else if (cleanedMessage.cmd === "autoComplete")
+    else if (cleanedMessage.cmd === "addImage")
     {
-        autoComplete(cleanedMessage)
+        console.log("addImage");
+        // console.log(cleanedMessage["translation"]);
+        aImageName = '';
+        aImageName = `${cleanedMessage["translation"].join("_")}${additionalImagesNames.length + 1}`;
+        downloadImage(cleanedMessage["imageURL"], aImageName)
+        .then(downloadRes => {
+            additionalImagesNames.push(aImageName + "." + wordImageExt)
+            console.log(`${additionalImagesNames.length}: ${additionalImagesNames}`)
+            wordImageExt = "";
+        })
         .catch(error => {
-            console.error(error)
-            console.log("error caught continuing. Sending Go Back")
-            res.send({cmd: "autoError"});
+            console.error(error);
+            console.log(`${wordList[pos]}: couldn't download additional image or input is bad`);
         })
     }
+    // else if (cleanedMessage.cmd === "autoComplete")
+    // {
+    //     autoComplete(cleanedMessage)
+    //     .catch(error => {
+    //         console.error(error)
+    //         console.log("error caught continuing. Sending Go Back")
+    //         res.send({cmd: "autoError"});
+    //     })
+    // }
     
     
 });
@@ -133,9 +150,14 @@ function cleanMessage(_msg){
         imageURL: _msg["imageURL"],
         imageRequired: _msg["imageRequired"]
     }
-    if(_msg["translation"] != null){
-        newMsg.translation = removeSpecialChars(_msg["translation"]);
-        console.log(`new ${newMsg.translation} old ${_msg["translation"]}`)
+    if(_msg.translation != null){
+        _res = [];
+        for(ele of _msg.translation){
+            // console.log(ele);
+            _res.push(removeSpecialChars(ele));
+        }
+        newMsg.translation = _res;
+        console.log(`new ${newMsg.translation} old ${_msg.translation}`)
     }
     if(_msg["targetWord"] != null){
         newMsg.targetWord = removeSpecialChars(_msg["targetWord"]);
@@ -152,32 +174,37 @@ function spanishDictUrl(_word){
 function googleImagesUrl(_word){
     return "https://www.google.com/search?tbm=isch&q=" + _word
 }
-async function autoComplete(_msg){
-    fakeMessage = 
-    {
-        targetWord: _msg.targetWord,
-        translation: _msg.translation,
-        defTargetLang: "",
-        imageURL: AAD_Scrape.scrapeGIFirst(googleImagesUrl(_msg.translation)),
-        sentence: "",
-        imageRequired: true
-    }
-    OutPutLog(fakeMessage, fakeMessage.translation)
-}
+// async function autoComplete(_msg){
+//     fakeMessage = 
+//     {
+//         targetWord: _msg.targetWord,
+//         translation: _msg.translation,
+//         defTargetLang: "",
+//         imageURL: await AAD_Scrape.scrapeGIFirst(googleImagesUrl(_msg.translation)),
+//         sentence: "",
+//         imageRequired: true
+//     }
+//     downloadImage(fakeMessage["imageURL"], fakeMessage["translation"])
+//         .then(downloadRes => {
+//             OutPutLog(fakeMessage, fakeMessage["translation"] + "." + wordImageExt);
+//             wordImageExt = "";
+//         })
+// }
 function OutPutLog(_json, _imageName, _imageRequired = true)
 {
     if (!fs.existsSync("OutputLog.csv")) {
         fs.writeFileSync("OutputLog.csv", '');
     }
-    _imageTag = ''
+    _imageField = ''
     if(_imageRequired){
-        _imageTag = `<img src='${_imageName}'/>`            
+        for(img of additionalImagesNames){
+            _imageField += `<img src='${img}'/>`;       
+        }
+        _imageField += `<img src='${_imageName}'/>`;       
     }
-    // else{
-    //     console.log("OutPutlLog skipping image tag")
-    // }
-    //     //spanish, picture, english, audio, ranking, sentence
-    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]}\n`); // Needs html stuff on name
+    _enlgishField = _json["translation"].join("_");
+
+    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageField},${_enlgishField},,,${_json["sentence"]}\n`); // Needs html stuff on name
 }
 
 function extensionFromURL(_url) {
