@@ -233,8 +233,9 @@ function makeTranslation(info, tab) {
   }
   if(imagePrefs.includes(IMAGE_MODES.UseTranslation)){
     browser.tabs.update(workingTabs[(tabIndex + 2) % workingTabs.length].id,
-     {url: googleImagesUrl(translationArr[translationArr.length])});
+     {url: googleImagesUrl(translationArr[translationArr.length - 1])});
 
+    // Note this is NOT the tab we just dumped the selection into.
     tabIndex = (tabIndex + 1) % workingTabs.length;
     browser.tabs.update(workingTabs[tabIndex].id, {active: true});
 
