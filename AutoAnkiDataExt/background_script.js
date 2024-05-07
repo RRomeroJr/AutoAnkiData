@@ -13,6 +13,8 @@ wordIndexes = []
 currWordIndex = 0
 workingTabs = []
 tabIndex  = 0
+const WORKING_SECTIONS = 2
+const TABS_PER_WORD = 3;
 manuallySetDictForm = false;
 
 const IMAGE_MODES = {
@@ -216,7 +218,6 @@ function autoComplete(info, tab){
   nextWord();
   xhr.send(jsonStr);
   console.log("sent auto request")
-
 }
 function makeTranslation(info, tab) {
   translationArr.push(info.selectionText)
@@ -230,10 +231,13 @@ function makeTranslation(info, tab) {
     tabIndex = (tabIndex + 1) % workingTabs.length;
     browser.tabs.update(workingTabs[tabIndex].id, {active: true});
   }
-  else if(imagePrefs.includes(IMAGE_MODES.UseTranslation)){
+  if(imagePrefs.includes(IMAGE_MODES.UseTranslation)){
+    browser.tabs.update(workingTabs[(tabIndex + 2) % workingTabs.length].id,
+     {url: googleImagesUrl(translationArr[translationArr.length])});
+
     tabIndex = (tabIndex + 1) % workingTabs.length;
-    browser.tabs.update(workingTabs[tabIndex].id, {active: true, url: googleImagesUrl(inTranslation)});
-    // ToGoogleImages(inTranslation);
+    browser.tabs.update(workingTabs[tabIndex].id, {active: true});
+
   }
 }
 function addTranslation(info, tab){
@@ -252,7 +256,7 @@ function setDictForm(info, tab) {
   manuallySetDictForm = true;
 }
 
-function startList(info, tab) {
+async function startList(info, tab) {
 
   inTargetWord = "";
   inTranslation = "";
@@ -269,7 +273,7 @@ function startList(info, tab) {
     cmd: "startList",
     imageRequired: imageRequired
   })
-  xhr.onload = function() {
+  xhr.onload = async function() {
     // console.log("start onload")
     if (xhr.status >= 200 && xhr.status < 300) {
       // Request was successful, handle the response
@@ -277,40 +281,31 @@ function startList(info, tab) {
       wordList = resJSON["wordList"];
       inTargetWord = wordList[currWordIndex];
 
-      browser.tabs.create({}).then((tab) => {
-        workingTabs.push(tab)
-        browser.tabs.create({}).then((tab2) => {
-          workingTabs.push(tab2)
-          browser.tabs.create({}).then((tab3) => {
-            workingTabs.push(tab3)
-            browser.tabs.create({}).then((tab4) => {
-              workingTabs.push(tab4)
-              imageTabArgs = null
+      tabPromises = [];
 
-              browser.tabs.update(workingTabs[tabIndex % workingTabs.length].id, { active: true, url: spanishDictUrl(wordList[currWordIndex])});
-              if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
-                imageTabArgs = { url: googleImagesUrl(wordList[currWordIndex])}
-              }
-              else{
-                imageTabArgs = {}
-              }
-              browser.tabs.update(workingTabs[tabIndex + 1 % workingTabs.length].id, imageTabArgs);
-              
-              browser.tabs.update(workingTabs[tabIndex + 2 % workingTabs.length].id, { url: spanishDictUrl(wordList[currWordIndex + 1])});
-              if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
-                imageTabArgs = { url: googleImagesUrl(wordList[currWordIndex + 1])}
-              }
-              else{
-                imageTabArgs = {}
-              }
-              browser.tabs.update(workingTabs[tabIndex + 3 % workingTabs.length].id, imageTabArgs);
-
-            });
-          });
+      while(workingTabs.length < WORKING_SECTIONS * TABS_PER_WORD ) {
+        await browser.tabs.create({}).then((tab) => {
+          workingTabs.push(tab);
         });
-      });
-
-
+      }
+      imageTabArgs = null
+      
+      for(let sectionStart = 0; sectionStart < workingTabs.length; sectionStart = sectionStart + TABS_PER_WORD){
+        if(TABS_PER_WORD >= 0){
+          // 1st
+          browser.tabs.update(workingTabs[sectionStart].id, { url: spanishDictUrl(wordList[currWordIndex + Math.trunc(sectionStart / TABS_PER_WORD)])});
+        }
+        if(TABS_PER_WORD >= 1){
+        // 2nd
+        imageTabArgs = imagePrefs.includes(IMAGE_MODES.UseTargetWord) ? { url: googleImagesUrl(wordList[currWordIndex + Math.trunc(sectionStart / TABS_PER_WORD)])} : {}
+        browser.tabs.update(workingTabs[sectionStart + 1].id, imageTabArgs);
+        }
+        if(TABS_PER_WORD >= 2){
+            imageTabArgs = {};
+            browser.tabs.update(workingTabs[sectionStart + 2].id, imageTabArgs);
+        }
+      }
+      browser.tabs.update(workingTabs[0].id, {active: true});
     } else {
       // Request encountered an error
       console.error('Request failed with status:', xhr.status);
@@ -326,21 +321,17 @@ function nextWord(info, tab) {
     return
   }
   
-  if(tabIndex & 1){ // isOdd
-    tabIndex = (tabIndex  + 1) % workingTabs.length;
-  }
-  else{
-    tabIndex = (tabIndex  + 2) % workingTabs.length;
-  }
+  tabIndex += (TABS_PER_WORD - (tabIndex % TABS_PER_WORD));
+  tabIndex = tabIndex % workingTabs.length;
 
   currWordIndex += 1;
   inTargetWord = wordList[currWordIndex];
   // Update current tab with the order after the next word
   // before switching to the tab with the current word
   if(currWordIndex + 1 < wordList.length){
-    browser.tabs.update(workingTabs[(tabIndex + 2) % workingTabs.length].id, { url: spanishDictUrl(wordList[currWordIndex + 1])});
+    browser.tabs.update(workingTabs[(tabIndex + TABS_PER_WORD) % workingTabs.length].id, { url: spanishDictUrl(wordList[currWordIndex + 1])});
     if(imagePrefs.includes(IMAGE_MODES.UseTargetWord)){
-      browser.tabs.update(workingTabs[(tabIndex + 3) % workingTabs.length].id, { url: googleImagesUrl(wordList[currWordIndex + 1])});
+      browser.tabs.update(workingTabs[(tabIndex + TABS_PER_WORD + 1) % workingTabs.length].id, { url: googleImagesUrl(wordList[currWordIndex + 1])});
     }
   }
   browser.tabs.update(workingTabs[tabIndex].id, {active: true});
@@ -357,12 +348,11 @@ function prevWord(info, tab) {
     return 
   }
 
-  if(tabIndex & 1){ // isOdd
-    tabIndex = Math.abs((tabIndex  - 3) % workingTabs.length);
+  tabIndex -= (TABS_PER_WORD + (tabIndex % TABS_PER_WORD));
+  if(tabIndex < 0){
+    tabIndex += workingTabs.length;
   }
-  else{
-    tabIndex = Math.abs((tabIndex  - 2) % workingTabs.length);
-  }
+
   currWordIndex -= 1;
   inTargetWord = wordList[currWordIndex];
   console.log(`workingTabs[${tabIndex}].id, {active: true, url: spanishDictUrl(wordList[${currWordIndex}])}`);
