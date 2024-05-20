@@ -8,28 +8,33 @@ const express = require('express');
 const fs = require("fs");
 
 // CORS - Cross-Origin Resource Sharing (CORS)
-const cors = require('cors')
-const Path = require('path')
-const Axios = require('axios')
+const cors = require('cors');
+const Path = require('path');
+const Axios = require('axios');
+const AAD_Scrape = require('./AAD_Scrape.js');
+
 // Declare App
 const app = express();
 
 app.use(express.json());
 
 const messages = [];
-const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg"]
+const SUPPORTED_EXTS = ["jpeg", "jpg", "png", "webp", "gif", "tiff", "tif", "svg"];
 // const SUPPORTED_EXTS = [] // for testing
 
 imageRequired = true;
-
+additionalImagesNames = []
 wordImageExt = "";
 /** 
  * Remove non-unicode letters and all whitespace that isn't " "(space)
 **/
 function removeSpecialChars(str) {
-    const regex = new RegExp('[^\\p{L} ]', 'gu');
-    return str.replace(regex, "");
+  if(str === null || str === undefined){
+      return "";
   }
+  const regex = new RegExp('[^\\p{L} ]', 'gu');
+  return str.replace(regex, "");
+}
 if (!fs.existsSync("words.txt")) {
     fs.writeFileSync("words.txt", '');
 }
@@ -58,35 +63,28 @@ app.post('/api/messages', (req, res) => {
         sentence: req.body.sentence,
         imageRequired: req.body.imageRequired
     };
-    if(message.hasOwnProperty("imageRequired")){
-        if(imageRequired != message.imageRequired){
-            imageRequired = message.imageRequired;
+    // console.log(message.translation)
+    let cleanedMessage = cleanMessage(message);
+
+    messages.push(message);
+    if(cleanedMessage.hasOwnProperty("imageRequired")){
+        if(imageRequired != cleanedMessage.imageRequired){
+            imageRequired = cleanedMessage.imageRequired;
             console.log(`Image required: ${imageRequired}`);
         }
     }
-    // console.log(JSON.stringify(message))
-    if(message.cmd == "startList")
+    // console.log(JSON.stringify(cleanedMessage))
+    if(cleanedMessage.cmd == "startList")
     {
         
         pos = 0;
         console.log("starting list, 1st word: " + wordList[pos]);
-        res.send({nextWord: wordList[pos]});
+        res.send({wordList: wordList});
     }
-    else if (message.cmd == "cardData")
+    else if (cleanedMessage.cmd == "cardData")
     {
-        messages.push(message);
-        // console.log(JSON.stringify(message));
-        if(message["translation"] != ""){
-            // console.log(message["sentence"]);
-            const cleanedMessage = 
-            {
-                cmd: message["cmd"],
-                translation: removeSpecialChars(message["translation"]),
-                targetWord: removeSpecialChars(message["targetWord"]),
-                defTargetLang: removeSpecialChars(message["defTargetLang"]),
-                sentence: message["sentence"], // Not clean, I should make a regex like I did before or this
-                imageURL: message["imageURL"]
-            } 
+        // console.log(JSON.stringify(cleanedMessage));
+        if(cleanedMessage["translation"] != ""){
     
             if(imageRequired){
                 downloadImage(cleanedMessage["imageURL"], cleanedMessage["translation"])
@@ -115,37 +113,98 @@ app.post('/api/messages', (req, res) => {
         }
         
     }
-    else if (message.cmd === "skipWord")
+    else if (cleanedMessage.cmd === "addImage")
     {
-        pos = pos + 1;
-        console.log("Skipping, Next word is: " + wordList[pos])
-        res.send({cmd: "nextWord", nextWord: wordList[pos]});
+        console.log("addImage");
+        // console.log(cleanedMessage["translation"]);
+        aImageName = '';
+        aImageName = `${cleanedMessage["translation"].join("_")}${additionalImagesNames.length + 1}`;
+        downloadImage(cleanedMessage["imageURL"], aImageName)
+        .then(downloadRes => {
+            additionalImagesNames.push(aImageName + "." + wordImageExt)
+            console.log(`${additionalImagesNames.length}: ${additionalImagesNames}`)
+            wordImageExt = "";
+        })
+        .catch(error => {
+            console.error(error);
+            console.log(`${wordList[pos]}: couldn't download additional image or input is bad`);
+        })
     }
-    else if (message.cmd === "GoBack")
-    {
-        pos = pos - 1;
-        if(pos < 0){
-            pos = 0;
-        }
-        console.log("Going back to: " + wordList[pos])
-        res.send({cmd: "nextWord", nextWord: wordList[pos]});
-    }
+    // else if (cleanedMessage.cmd === "autoComplete")
+    // {
+    //     autoComplete(cleanedMessage)
+    //     .catch(error => {
+    //         console.error(error)
+    //         console.log("error caught continuing. Sending Go Back")
+    //         res.send({cmd: "autoError"});
+    //     })
+    // }
+    
     
 });
+function cleanMessage(_msg){
+    // console.log(_msg);
+    newMsg = {
+        cmd: _msg["cmd"],
+        sentence: _msg["sentence"], // Not clean, I should make a regex like I did before or this
+        imageURL: _msg["imageURL"],
+        imageRequired: _msg["imageRequired"]
+    }
+    if(_msg.translation != null){
+        _res = [];
+        for(ele of _msg.translation){
+            // console.log(ele);
+            _res.push(removeSpecialChars(ele));
+        }
+        newMsg.translation = _res;
+        console.log(`new ${newMsg.translation} old ${_msg.translation}`)
+    }
+    if(_msg["targetWord"] != null){
+        newMsg.targetWord = removeSpecialChars(_msg["targetWord"]);
+    }
+    if(_msg["defTargetLang"] != null){
+        newMsg.defTargetLang = removeSpecialChars(_msg["defTargetLang"]);
+    }
+    // console.log(newMsg);
+    return newMsg;
+}
+function spanishDictUrl(_word){
+    return "https://www.spanishdict.com/translate/" + _word + "?langFrom=es";
+}
+function googleImagesUrl(_word){
+    return "https://www.google.com/search?tbm=isch&q=" + _word
+}
+// async function autoComplete(_msg){
+//     fakeMessage = 
+//     {
+//         targetWord: _msg.targetWord,
+//         translation: _msg.translation,
+//         defTargetLang: "",
+//         imageURL: await AAD_Scrape.scrapeGIFirst(googleImagesUrl(_msg.translation)),
+//         sentence: "",
+//         imageRequired: true
+//     }
+//     downloadImage(fakeMessage["imageURL"], fakeMessage["translation"])
+//         .then(downloadRes => {
+//             OutPutLog(fakeMessage, fakeMessage["translation"] + "." + wordImageExt);
+//             wordImageExt = "";
+//         })
+// }
 function OutPutLog(_json, _imageName, _imageRequired = true)
 {
     if (!fs.existsSync("OutputLog.csv")) {
         fs.writeFileSync("OutputLog.csv", '');
     }
-    _imageTag = ''
+    _imageField = ''
     if(_imageRequired){
-        _imageTag = `<img src='${_imageName}'/>`            
+        for(img of additionalImagesNames){
+            _imageField += `<img src='${img}'/>`;       
+        }
+        _imageField += `<img src='${_imageName}'/>`;       
     }
-    // else{
-    //     console.log("OutPutlLog skipping image tag")
-    // }
-    //     //spanish, picture, english, audio, ranking, sentence
-    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageTag},${_json["translation"]},,,${_json["sentence"]}\n`); // Needs html stuff on name
+    _enlgishField = _json["translation"].join("_");
+
+    fs.appendFileSync('OutputLog.csv', `${_json["targetWord"]},${_imageField},${_enlgishField},,,${_json["sentence"]}\n`); // Needs html stuff on name
 }
 
 function extensionFromURL(_url) {
